@@ -21,7 +21,6 @@ const blockedIPs = new Map();
 const blockedFile = path.join(__dirname, 'blocked.txt');
 const logsFile = path.join(__dirname, 'logs.txt');
 
-// Custom rate limiter
 const requestCounts = {};
 const requestResetInterval = 1000; // Reset counts every second
 
@@ -29,7 +28,6 @@ let connections = 0;
 let blockedconnections = 0;
 let uniqueIPs = new Map();
 
-// Function to log blocking events to the logs.txt file
 const logBlockedIP = (ip, reason) => {
   const logMessage = `[Blocked IP] ${ip} - ${reason}`;
   //console.log(`[Sensor ( INFO )] » ${colors.red(logMessage)}`);
@@ -39,14 +37,12 @@ const logBlockedIP = (ip, reason) => {
     }
   });
 
-  // Write blocked IP to the blocked.txt file
   fs.appendFile(blockedFile, `${ip}\n`, (err) => {
     if (err) {
       console.error('Error writing to blocked.txt:', err);
     }
   });
 
-  // Block IP using iptables (only on ports 80 and 443)
   exec(`iptables -A INPUT -s ${ip} -p tcp --sport 80 --dport 80 -j DROP && iptables -A INPUT -s ${ip} -p tcp --sport 443 --dport 443 -j DROP`, (err, stdout, stderr) => {
     if (err) {
       console.error('Error blocking IP with iptables:', err);
@@ -54,7 +50,6 @@ const logBlockedIP = (ip, reason) => {
   });
 };
 
-// Read blocked IPs from file on startup
 fs.readFile(blockedFile, 'utf8', (err, data) => {
   if (!err) {
     const lines = data.split('\n');
@@ -69,7 +64,6 @@ fs.readFile(blockedFile, 'utf8', (err, data) => {
 app.use((req, res, next) => {
   const ip = req.ip;
 
-  // Check if the IP is blocked
   if (blockedIPs.has(ip) && Date.now() < blockedIPs.get(ip)) {
     blockedconnections++;
     //console.log(`[Sensor ( INFO )] » Blocked IP ${colors.red(ip)}`);
@@ -84,16 +78,14 @@ app.use((req, res, next) => {
   if (currentConnections >= MAX_CONNECTIONS_PER_IP) {
     logBlockedIP(ip, 'Excessive connections');
     blockedIPs.set(ip, currentTimestamp + BLOCK_DURATION);
-    res.destroy(); // Close the connection
+    res.destroy();
     return;
   }
 
   requestCounts[ip] = currentConnections + 1;
 
-  // Increment the total connections count
   connections++;
 
-  // Increment the connection count for the IP
   uniqueIPs.set(ip, currentConnections + 1);
 
   next();
@@ -107,7 +99,6 @@ app.get('/', (req, res) => {
 app.use('/proxy-endpoint', (req, res, next) => {
   const ip = req.ip;
 
-  // Check if the IP is blocked
   if (blockedIPs.has(ip) && Date.now() < blockedIPs.get(ip)) {
     blockedconnections++;
     //console.log(`[Sensor ( INFO )] » Blocked IP ${colors.red(ip)}`);
@@ -115,14 +106,13 @@ app.use('/proxy-endpoint', (req, res, next) => {
     return;
   }
 
-  // Custom rate limiting for the proxy endpoint
   const currentTimestamp = Date.now();
   const currentConnections = requestCounts[ip] || 0;
 
   if (currentConnections >= MAX_CONNECTIONS_PER_IP) {
     logBlockedIP(ip, 'Excessive connections');
     blockedIPs.set(ip, currentTimestamp + BLOCK_DURATION);
-    res.destroy(); // Close the connection
+    res.destroy();
     return;
   }
 
@@ -152,7 +142,6 @@ setInterval(() => {
 }, 1000);
 
 setInterval(() => {
-  // Reset the request counts every second
   for (const ip in requestCounts) {
     requestCounts[ip] = 0;
   }
